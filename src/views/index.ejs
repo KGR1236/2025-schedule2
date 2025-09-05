@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>2025 교육일정 예측</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="calendar-section">
+            <div class="calendar-nav">
+                <button id="prevMonth">&lt;</button>
+                <span id="currentDate"><%= year %>년 <%= month %>월</span>
+                <button id="nextMonth">&gt;</button>
+            </div>
+            
+            <div class="calendar-grid">
+                <div class="calendar-day">일</div>
+                <div class="calendar-day">월</div>
+                <div class="calendar-day">화</div>
+                <div class="calendar-day">수</div>
+                <div class="calendar-day">목</div>
+                <div class="calendar-day">금</div>
+                <div class="calendar-day">토</div>
+                <% 
+                const days = Array(calendar.firstDay).fill('').concat(
+                    Array.from({length: calendar.lastDate}, (_, i) => i + 1)
+                );
+                while(days.length < 42) days.push('');
+                
+                days.forEach((day, index) => { 
+                    let className = 'calendar-day';
+                    educationDates.red.forEach(([start, end]) => {
+                        if (day >= start && day <= end) className += ' red';
+                    });
+                    educationDates.blue.forEach(([start, end]) => {
+                        if (day >= start && day <= end) className += ' blue';
+                    });
+                    educationDates.green.forEach(([start, end]) => {
+                        if (day >= start && day <= end) className += ' green';
+                    });
+                %>
+                    <div class="<%= className %>"><%= day %></div>
+                <% }); %>
+            </div>
+        </div>
+
+        <div class="graph-section">
+            <canvas id="educationChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('educationChart').getContext('2d');
+        const data = <%- JSON.stringify(data) %>;
+        let calendar = <%- JSON.stringify(calendar) %>;
+        
+        Chart.register(ChartDataLabels);
+        
+        let myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(data),
+                datasets: [{
+                    data: Object.values(data),
+                    backgroundColor: ['#ff6666', '#6699ff', '#33cc33'],
+                    barPercentage: 0.5,
+                    categoryPercentage: 0.8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        top: 30,
+                        bottom: 20
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    datalabels: {
+                        color: '#000',
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 5,
+                        font: {
+                            size: 14
+                        },
+                        formatter: function(value) {
+                            return value;
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        display: false,
+                        beginAtZero: true,
+                        max: 100
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            font: {
+                                size: 14,
+                            weight: 'bold' // x축 글자 두께
+                        },
+                        color: '#000'      // x축 글자 색상
+                    },
+                    border: {
+                        width: 2,          // x축 테두리 두께
+                        color: '#000'      // x축 테두리 색상
+                    }
+                }
+            }
+        }
+    });
+
+        // 달력 그리드 업데이트 함수
+        function updateCalendarGrid(firstDay, lastDate, educationDates) {
+            const calendarGrid = document.querySelector('.calendar-grid');
+            const headerRow = Array.from(calendarGrid.children).slice(0, 7);
+            calendarGrid.innerHTML = '';
+            
+            // 요일 헤더 다시 추가
+            headerRow.forEach(header => calendarGrid.appendChild(header));
+            
+            // 날짜 계산
+            const days = Array(firstDay).fill('').concat(
+                Array.from({length: lastDate}, (_, i) => i + 1)
+            );
+            while(days.length < 42) days.push('');
+            
+            // 날짜 추가
+            days.forEach(day => {
+                let className = 'calendar-day';
+                if (day) {
+                    educationDates.red.forEach(([start, end]) => {
+                        if (day >= start && day <= end) className += ' red';
+                    });
+                    educationDates.blue.forEach(([start, end]) => {
+                        if (day >= start && day <= end) className += ' blue';
+                    });
+                    educationDates.green.forEach(([start, end]) => {
+                        if (day >= start && day <= end) className += ' green';
+                    });
+                }
+                const dayDiv = document.createElement('div');
+                dayDiv.className = className;
+                dayDiv.textContent = day;
+                calendarGrid.appendChild(dayDiv);
+            });
+        }
+
+        // 달력 업데이트 함수
+        async function updateCalendarAndChart(month) {
+            try {
+                const response = await fetch(`/api/month/${month}`);
+                const monthData = await response.json();
+                
+                // 날짜 텍스트 업데이트
+                document.getElementById('currentDate').textContent = `2025년 ${month}월`;
+
+                // 차트 데이터 업데이트
+                myChart.data.labels = Object.keys(monthData.data);
+                myChart.data.datasets[0].data = Object.values(monthData.data);
+                myChart.update();
+
+                // 달력 데이터 계산
+                const firstDay = new Date(2025, month - 1, 1).getDay();
+                const lastDate = new Date(2025, month, 0).getDate();
+
+                // 달력 그리드 업데이트
+                updateCalendarGrid(firstDay, lastDate, monthData.educationDates);
+
+            } catch (error) {
+                console.error('데이터 업데이트 실패:', error);
+            }
+        }
+
+        // 이전/다음 월 버튼 이벤트
+        document.getElementById('prevMonth').addEventListener('click', async () => {
+            const currentMonth = parseInt(document.getElementById('currentDate').textContent.match(/\d+월/)[0]);
+            if (currentMonth > 1) {
+                await updateCalendarAndChart(currentMonth - 1);
+            }
+        });
+
+        document.getElementById('nextMonth').addEventListener('click', async () => {
+            const currentMonth = parseInt(document.getElementById('currentDate').textContent.match(/\d+월/)[0]);
+            if (currentMonth < 12) {
+                await updateCalendarAndChart(currentMonth + 1);
+            }
+        });
+    </script>
+</body>
+</html>
